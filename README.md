@@ -119,3 +119,11 @@ Core collection code lives in `lib/crawler.ts` and `lib/reader.ts`; library beha
 ## License and credits
 
 Margin's original code is MIT licensed. UI and font sources retain their own notices; see [THIRD_PARTY_UI.md](THIRD_PARTY_UI.md), [third-party/](third-party/), and [public/fonts/LICENSE.txt](public/fonts/LICENSE.txt). Publisher articles and media remain the property of their respective publishers and are not included in the repository.
+
+## Publisher compatibility and topics
+
+The [compatibility audit](docs/COMPATIBILITY.md) records the current twelve publishers, discovery routes, sampled captures, and tested inbox/MCP behavior. Run `node scripts/audit-publishers.mjs` to repeat the read-only live check. It writes public publisher captures into ignored `outputs/compatibility/`; it does not change subscriptions or personal state. The optional local feature audit, `node scripts/audit-library-features.mjs`, is for a populated disposable local instance with its sources paused, and temporarily exercises save/read/notes and source removal/restoration there.
+
+Topics share one twenty-category vocabulary across the inbox, previews, related posts, and MCP overview/search. Categories are grouped by methods, systems, capabilities, and applications/impact. Assignment weighs the title and publisher summary more strongly than repeated body terms, keeps the strongest four matches, and leaves weak matches unassigned. This is a transparent navigation aid rather than a claim that the publisher chose those labels. Existing libraries are reclassified automatically without changing saved/read state or notes. Topic counts respect the current source and inbox filters.
+
+Collection repairs older extraction versions progressively, including previously accepted publisher error pages. HTML discovery recognizes explicit next-page and Load more links, keeps query/tag filters across pagination and redirects, and checks up to 25 linked pages. OpenAI research discovery supplements the real research index with only Research and Publication entries from its official news RSS. Text and media extraction remain bounded; publisher originals are the complete presentation.

@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio/slim';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import { publicUrl } from './public-url.ts';
+import {classifyTopics} from './topics.ts';
 import { collectionSession, readerSnapshot, snapshotHtml, escapeHtml, boundedText, accessPage, type CollectionSession, type ReaderSnapshot } from './reader.ts';
 export {publicUrl} from './public-url.ts';
 export {collectionSession} from './reader.ts';
@@ -13,7 +14,7 @@ const str = (x:any):string => typeof x === 'object' ? String(x?.['#text'] ?? '')
 const articlePath = /\/(blog|articles|field-notes|data-insights|gradient-updates|research|engineering|post|posts|reports|publications|latest|news|journal|insights|writing)\/.+/;
 const utilityPath = /\/(tags?|category|categories|authors?|topics|teams?|careers|about|privacy|legal|contact|data|page)(\/|$)/i;
 const sameHost = (a:URL,b:URL) => a.hostname.replace(/^www\./,'')===b.hostname.replace(/^www\./,'');
-const scopeParams=(url:URL)=>[...url.searchParams.entries()].filter(([key])=>!/^(p|page|offset|cursor|sort|order|per_page|limit)$/i.test(key));
+const scopeParams=(url:URL)=>[...url.searchParams.entries()].filter(([key])=>!/^(p|page|offset|cursor|sort|order|per_page|limit|[\w-]+_page)$/i.test(key));
 const keepsScope=(target:URL,source:URL)=>scopeParams(source).every(([key,value])=>target.searchParams.getAll(key).includes(value));
 const publisherHost = (a:URL,b:URL) => sameHost(a,b)||a.hostname.endsWith('.'+b.hostname.replace(/^www\./,''));
 function articleUrl(raw:string,base:string) {
@@ -45,8 +46,7 @@ function visibleDate(text:string) {
   return written?date(written[0]+' UTC'):null;
 }
 export function topics(text:string) {
-  const rules:[string,RegExp][]=[['Reinforcement learning',/\bRL\b|reinforcement|reward|post.train/i],['Evaluation',/benchmark|evaluat|grader|terminal.bench/i],['Continual learning',/continual|forget|gradient step|iteratively/i],['Inference',/inference|latency|serving|intelligence density/i],['Compute',/comput|chip|data.center|GPU|scaling/i],['Agents',/agent|long.horizon|decision|tool.use/i],['Safety',/safety|alignment|exploit|security|cheat|reward.hack/i]];
-  return rules.filter(([,r])=>r.test(text)).map(([t])=>t).slice(0,4);
+  return classifyTopics(text);
 }
 export function feedEntries(body:string,base:string):any[] {
   try {
@@ -58,11 +58,13 @@ export function feedEntries(body:string,base:string):any[] {
   }catch{return [];}
 }
 export function htmlEntries(html:string,base:string,scoped=false):any[] {
-  const $=cheerio.load(html);$('nav,header,footer,[role="navigation"]').remove();if(scoped)$('aside,[role="complementary"]').remove();const origin=new URL(base);const prefix=origin.pathname.replace(/\/$/,'');const out=new Map();
+  const $=cheerio.load(html);$('nav,footer,[role="navigation"]').remove();$('header').filter((_,e)=>!$(e).closest('article,li,[class*="card"],[class*="Card"]').length).remove();if(scoped)$('aside,[role="complementary"]').remove();const origin=new URL(base);const prefix=origin.pathname.replace(/\/$/,'');const out=new Map();
   $('a[href]').each((_,el)=>{
     const a=$(el);let url:string;try{url=publicUrl(a.attr('href')!,base);}catch{return;}
+    if(a.closest('header').length&&!a.find('h1,h2,h3,h4,[role="heading"]').length&&!a.closest('h1,h2,h3,h4,[role="heading"]').length)return;
     if(!articleUrl(url,base))return;const u=new URL(url);if(/^\/publications\/?$/.test(u.pathname))return;
-    const card=a.closest('article,li,[class*="card"],[class*="Card"]');
+    let card=a.closest('article,li,[class*="card"],[class*="Card"],[role="listitem"],.w-dyn-item');
+    if(!card.length){const parent=a.parents().toArray().slice(0,5).find(e=>$(e).find('time').length===1&&$(e).find('h1,h2,h3,h4').length<=2);if(parent)card=$(parent);}
     const label=a.text().replace(/\s+/g,' ').trim();
     const published=date(a.find('time[datetime]').first().attr('datetime')||card.find('time[datetime]').first().attr('datetime'))||visibleDate(label)||visibleDate(card.text().slice(0,1000));
     const contextual=!!a.find('h1,h2,h3,h4,h5,h6,[role="heading"],[data-title],.h1,.h2,.h3,.h4,.h5,.h6,[class*="heading"],[class*="Heading"]').length || !!a.closest('article').length || !!published&&articlePath.test(u.pathname);
@@ -71,7 +73,7 @@ export function htmlEntries(html:string,base:string,scoped=false):any[] {
     const imageTitle=a.find('img[alt]').first().attr('alt');
     const title=(a.find('h1,h2,h3,h4,h5,h6,[role="heading"],[class*="title"],[class*="Title"],[data-title],.h1,.h2,.h3,.h4,.h5,.h6,[class*="heading"],[class*="Heading"]').first().text()||a.find('[title]').first().attr('title')||a.attr('aria-label')||(imageTitle&&imageTitle.length>5&&label.includes(imageTitle)?imageTitle:'')||label).replace(/\s+/g,' ').trim();
     if(title.length<4||/^(continue reading|read more|all posts|learn more|view all|next page)/i.test(title))return;
-    if(!published&&/^(all|publications?|conclusions?|milestones?|releases?|research|blog|news|company|products?)$/i.test(title))return;
+    if(!published&&/^(all|publications?|conclusions?|milestones?|releases?|research|blog|news|company|products?|load more|previous|next)$/i.test(title))return;
     const old=out.get(url);if(!old)out.set(url,{url,title:title.slice(0,250),published});else if(!old.published&&published)out.set(url,{...old,published});
   });
   // Read structured hydration data as data only; never execute publisher scripts.
@@ -101,7 +103,7 @@ export function readerEntries(snapshot:ReaderSnapshot,base:string){
   return htmlEntries(cards.join(''),base);
 }
 async function readerDiscovery(raw:string,session:CollectionSession):Promise<Discovery>{
-  const snapshot=await readerSnapshot(raw,session),entries=readerEntries(snapshot,raw);
+  const snapshot=await readerSnapshot(raw,session);if(!keepsScope(new URL(snapshot.url),new URL(raw)))throw new Error('Reader redirect dropped the selected source filter.');const entries=readerEntries(snapshot,raw);
   if(!entries.length)throw new Error('Reader loaded the page but found no article links.');
   return {entries,method:'Reader discovery',feedUrl:null,name:snapshot.metadata['og:site_name']||snapshot.title||new URL(raw).hostname};
 }
@@ -117,6 +119,15 @@ async function huggingFaceTaggedEntries(html:string,url:URL){
  return ordered(entries);
 }
 export type Discovery = {entries:any[];method:string;feedUrl:string|null;name:string|null;notice?:string};
+export function nextPageLink($:ReturnType<typeof cheerio.load>){
+  return $('link[rel="next"],a[href]').filter((_,e)=>$(e).attr('rel')==='next'||/^(next|next page|older posts|older entries|load more)\s*[→›»]?$/i.test(($(e).attr('aria-label')||$(e).text()).trim())).first().attr('href');
+}
+async function supplementResearchIndex(index:Discovery){
+  // Some rendered research indexes expose only their latest cards. The official
+  // research/publication feed supplies an independent, scoped discovery path.
+  try{const page=await fetchPage('https://openai.com/news/rss.xml');const feed=feedEntries(page.html,page.url).filter(e=>e.categories.some((c:string)=>/^(research|publication)$/i.test(c)));const entries=new Map(index.entries.map(e=>[e.url.replace(/\/$/,''),e]));let added=0;for(const e of feed){const key=e.url.replace(/\/$/,'');if(!entries.has(key))added++;entries.set(key,{...entries.get(key),...e});}if(added)return {...index,entries:ordered([...entries.values()]),method:index.method+' + research RSS'};}catch{}
+  return index;
+}
 export async function discover(raw:string,knownFeed?:string|null,session=collectionSession()):Promise<Discovery> {
   // This publisher's general news feed is reachable even when its research index
   // rejects server requests. Keep its narrower scope explicit on every refresh.
@@ -124,8 +135,8 @@ export async function discover(raw:string,knownFeed?:string|null,session=collect
   if(requested.hostname.replace(/^www\./,'')==='openai.com'&&/^\/research(?:\/index)?\/?$/.test(requested.pathname)){
     // Access varies by execution region. Prefer the actual index whenever it is
     // readable, and retry it on future checks even if RSS was previously used.
-    try{const page=await fetchPage(raw);const entries=htmlEntries(page.html,page.url);if(entries.length)return {entries,method:'Research index',feedUrl:null,name:'OpenAI Research'};}catch{}
-    try{return {...await readerDiscovery(raw,session),name:'OpenAI Research'};}catch{}
+    try{const page=await fetchPage(raw);const entries=htmlEntries(page.html,page.url);if(entries.length)return await supplementResearchIndex({entries,method:'Research index',feedUrl:null,name:'OpenAI Research'});}catch{}
+    try{return await supplementResearchIndex({...await readerDiscovery(raw,session),name:'OpenAI Research'});}catch{}
     const feed=await fetchPage('https://openai.com/news/rss.xml');
     const entries=feedEntries(feed.html,feed.url).filter(e=>e.categories.some((c:string)=>/^(research|publication)$/i.test(c)));
     if(!entries.length)throw new Error('OpenAI’s research index blocks server access, and its RSS feed currently exposes no research-category entries.');
@@ -133,7 +144,7 @@ export async function discover(raw:string,knownFeed?:string|null,session=collect
   }
   const scoped=scopeParams(requested).length>0;
   let page;let accessError='';
-  try{page=await fetchPage(!scoped&&knownFeed?knownFeed:raw);}catch(e:any){accessError=e.message;try{return await readerDiscovery(raw,session);}catch{}page={html:'',url:publicUrl(raw),headers:new Headers()};}
+  try{page=await fetchPage(!scoped&&knownFeed?knownFeed:raw);if(scoped&&!keepsScope(new URL(page.url),requested))throw new Error('Publisher redirect dropped the selected source filter.');}catch(e:any){accessError=e.message;try{return await readerDiscovery(raw,session);}catch{}page={html:'',url:publicUrl(raw),headers:new Headers()};}
   let entries=feedEntries(page.html,page.url);
   if(entries.length)return {entries,method:page.html.trim().startsWith('{')?'JSON Feed':'RSS / Atom',feedUrl:page.url,name:null};
   const $=cheerio.load(page.html);const name=$('meta[property="og:site_name"]').attr('content')||$('title').text().split(/[|—–\\]|\s+-\s+/).map(s=>s.trim()).filter(s=>s&&!/^(blog|research|articles|latest|news|home|field notes)$/i.test(s)).pop()||new URL(raw).hostname.replace(/^www\./,'');
@@ -152,14 +163,16 @@ export async function discover(raw:string,knownFeed?:string|null,session=collect
     return {entries,method:p.html.trim().startsWith('{')?'JSON Feed':'RSS / Atom',feedUrl:p.url,name};}}catch{}}
   entries=indexEntries;
   if(entries.length){
-    // Follow only explicit same-section pagination, with a strict two-page bound.
+    // Follow explicit pagination, including Webflow's Load more links. A finite
+    // budget protects checks from infinite calendars and pagination loops.
     let current=$,currentUrl=page.url;const visited=new Set([page.url]);
-    for(let i=0;i<2;i++){
-      const next=current('link[rel="next"],a[rel="next"],a').filter((_,e)=>current(e).attr('rel')==='next'||/^(next|next page|older posts|older entries)\s*[→›»]?$/i.test(current(e).text().trim())).first().attr('href');
+    let notice:string|undefined;
+    for(let i=0;i<24;i++){
+      const next=nextPageLink(current);
       if(!next)break;
-      try{const url=publicUrl(next,currentUrl);const u=new URL(url),start=new URL(page.url);if(!sameHost(u,start)||!u.pathname.startsWith(start.pathname.replace(/\/$/,''))||!keepsScope(u,requested)||visited.has(url))break;visited.add(url);const p=await fetchPage(url);entries.push(...htmlEntries(p.html,p.url,scoped));current=cheerio.load(p.html);currentUrl=p.url;}catch{break;}
+      try{const url=publicUrl(next,currentUrl);const u=new URL(url),start=new URL(page.url),prefix=start.pathname.replace(/\/$/,'');if(!sameHost(u,start)||!(u.pathname===start.pathname||u.pathname.replace(/\/$/,'')===prefix||u.pathname.startsWith(prefix+'/'))||!keepsScope(u,requested)||visited.has(url))break;visited.add(url);const p=await fetchPage(url);if(!keepsScope(new URL(p.url),requested))break;const more=htmlEntries(p.html,p.url,scoped);if(!more.length)break;entries.push(...more);current=cheerio.load(p.html);currentUrl=p.url;if(i===23&&nextPageLink(current))notice='This index has more than 25 linked pages; the first 25 pages were checked.';}catch{notice='A later index page could not be read. The visible pages were collected and pagination will be retried.';break;}
     }
-    return {entries:ordered(entries),method:'HTML discovery',feedUrl:null,name};
+    return {entries:ordered(entries),method:'HTML discovery',feedUrl:null,name,...(notice?{notice}:{})};
   }
   try{return await readerDiscovery(raw,session);}catch{}
   if(scoped)throw new Error('The filtered page could not be read after direct and reader attempts. The subscription was kept filtered; no unfiltered feed or sitemap was imported.');
@@ -174,7 +187,7 @@ export function feedFallback(entry:any,reason:string) {
     const a=extractCapture(entry,entry.feedContentType==='text'?`<article></article>`:entry.feedContent,entry.url);
     return {...a,content:entry.feedContentType==='text'?String(entry.feedContent).slice(0,50000):a.content,capture:'feed content only · original unavailable'};
   }
-  return {url:entry.url,title:entry.title,summary:entry.summary,content:'',published:entry.published||null,author:entry.author||null,media:'[]',tags:JSON.stringify(topics(entry.title+' '+entry.summary)),capture:'RSS excerpt only · original unavailable'};
+  return {url:entry.url,title:entry.title,summary:entry.summary,content:'',published:entry.published||null,author:entry.author||null,media:'[]',tags:JSON.stringify(classifyTopics(entry.title,entry.summary)),capture:'RSS excerpt only · original unavailable'};
 }
 export async function capture(entry:any,session=collectionSession()) {
   let direct:any;let reason='';
@@ -197,8 +210,9 @@ export function extractCapture(entry:any,html:string,url:string,headers=new Head
   const meta=(k:string)=>$(`meta[property="${k}"],meta[name="${k}"]`).first().attr('content');
   const title=$('main h1,article h1,h1').first().text().trim()||entry.title||meta('og:title');
   let published=date(meta('article:published_time')||meta('datePublished')||meta('date'))||entry.published||date($('main time[datetime],article time[datetime],time[datetime]').first().attr('datetime'))||null;
-  let author=meta('author')||entry.author||null;let structuredText='';
+  let author=meta('author')||meta('article:author')||entry.author||null;let structuredText='';
   $('script[type="application/ld+json"]').each((_,el)=>{try{const root=JSON.parse($(el).text());for(const j of arr(root['@graph']||root).filter(j=>/Article|BlogPosting|TechArticle|Report/.test(arr(j['@type']).join(' ')))){if(!published)published=date(j.datePublished);if(!author)author=arr(j.author).map(a=>a?.name||str(a)).join(', ')||null;if(typeof j.articleBody==='string'&&j.articleBody.length>structuredText.length)structuredText=cleanText(j.articleBody);}}catch{}});
+  if(!author){const names=$('[itemprop="author"] [itemprop="name"],[rel="author"],.byline-author,.author-name,[class*="author-name"],[class*="authorName"],[data-blog-authors-inline] a,[data-author-name]').map((_,e)=>$(e).text().replace(/\s+/g,' ').trim().replace(/\*+$/,'')).get().filter(s=>s.length>2&&s.length<120&&!/^(authors?|share|follow|published)$/i.test(s));author=[...new Set(names)].join(', ')||null;}
   if(!published){const embedded=html.match(/(?:publishedAt|datePublished|published_time)\\?"\s*:\s*\\?"(\d{4}-\d{2}-\d{2}[^"\\]*)/);if(embedded)published=date(embedded[1]);}
   if(!published)published=visibleDate($('main,article').first().text().slice(0,2200));
   const textContainers=$('[itemprop="articleBody"],.article-content,.post-content,.markdown-body,.prose').toArray().filter(e=>$(e).text().length>25).sort((a,b)=>$(b).text().length-$(a).text().length);
@@ -206,8 +220,11 @@ export function extractCapture(entry:any,html:string,url:string,headers=new Head
   // Multimodal essays often alternate prose islands, demos and captions. Select
   // their common container rather than silently keeping only the longest island.
   if(textContainers.length>1){while(contentRoot.parent().length&&!textContainers.every(el=>el===contentRoot[0]||$.contains(contentRoot[0],el)))contentRoot=contentRoot.parent();}
+  contentRoot.find('script,style,nav,footer,form,noscript,button,[aria-hidden="true"]').remove();
   const media:any[]=[];const seen=new Set();
   contentRoot.find('img,video,audio,iframe').each((_,el)=>{const e=$(el);const kind=el.tagName==='img'?'image':el.tagName==='video'?'video':el.tagName==='audio'?'audio':'interactive';const src=e.attr('src')||e.attr('data-src')||e.attr('data-lazy-src')||e.find('source').attr('src')||(e.attr('srcset')||e.attr('data-srcset')||e.closest('picture').find('source').attr('srcset'))?.split(',').pop()?.trim().split(/\s+/)[0];if(kind==='image'&&src&&/headshot|avatar|logo|profile.photo|h%3D128%26w%3D128/i.test(src))return;try{const u=src?publicUrl(src,url):kind!=='image'?url:null;if(!u)return;const key=kind+u;if(seen.has(key))return;seen.add(key);media.push({kind,url:u,alt:e.attr('alt')||e.attr('title')||(src?'':'Browser-loaded media — view at source'),caption:e.closest('figure').find('figcaption').text().trim()});}catch{}});
+  for(const m of media)if(m.kind==='interactive'&&/youtube(?:-nocookie)?\.com\/embed|player\.vimeo\.com|fast\.wistia\.(?:com|net)|loom\.com\/embed/.test(m.url))m.kind='video';
+  contentRoot.find('a[href]').each((_,el)=>{const e=$(el);try{const target=publicUrl(e.attr('href')!,url),kind=/\.(mp4|webm|mov)(\?|$)|youtube\.com\/watch|youtu\.be\/|vimeo\.com\//i.test(target)?'video':/\.(mp3|wav|ogg)(\?|$)/i.test(target)?'audio':null;if(kind&&!media.some(m=>m.url===target))media.push({kind,url:target,alt:e.text().trim(),caption:''});}catch{}});
   contentRoot.find('canvas,svg').each((i,el)=>{const e=$(el);if(el.tagName==='svg'&&!e.find('text').length&&!e.attr('aria-label')&&!e.closest('figure').length)return;media.push({kind:'interactive',url:url+(e.attr('id')?'#'+e.attr('id'):''),alt:e.attr('aria-label')||e.find('title').text()||'Inline visual — view at source',caption:e.closest('figure').find('figcaption').text().trim()});});
   contentRoot.find('script,style,nav,footer,header,form,noscript,button,[aria-hidden="true"]').remove();
   contentRoot.find('.katex').each((_,el)=>{const tex=$(el).find('annotation[encoding="application/x-tex"]').text();if(tex)$(el).replaceWith($('<span>').text(' $'+tex+'$ '));});
@@ -220,5 +237,5 @@ export function extractCapture(entry:any,html:string,url:string,headers=new Head
   const intro=contentRoot.find('p').map((_,e)=>$(e).text().trim()).get().find(t=>t.length>65&&!genericText(t));
   const summary=(entry.summary&&!genericText(entry.summary)?entry.summary:(!generic?description:'')||intro||blocks.find(t=>t.length>65)||content.slice(0,600)||'').trim().slice(0,600);
   const frameBlocked=/deny|sameorigin/i.test(headers.get('x-frame-options')||'')||/frame-ancestors\s+(?:'none'|'self')/.test(headers.get('content-security-policy')||'');
-  return {url,title:title.trim(),summary,content,published,author,media:JSON.stringify(media.slice(0,40)),tags:JSON.stringify(topics(title+' '+summary+' '+content.slice(0,3000))),capture:content.length>200?(frameBlocked?'text · original opens in tab':'text · media references'):'metadata only'};
+  return {url,title:title.trim(),summary,content,published,author,media:JSON.stringify(media.slice(0,40)),tags:JSON.stringify(classifyTopics(title,summary,content)),capture:content.length>200?(frameBlocked?'text · original opens in tab':'text · media references'):'metadata only'};
 }

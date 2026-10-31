@@ -14,7 +14,7 @@ export async function boundedText(response:Response,limit=4_000_000){
   return new TextDecoder().decode(bytes);
 }
 export function accessPage(title:string,content:string){
-  return /^(just a moment|access denied|attention required|robot check|sign in to continue|security verification|verify you are human|page not found|404\b)|^not found$/i.test(title.trim())||content.length<2000&&/^(?:[\s#*>_-]*)(?:checking your browser|verify you are human|enable javascript and cookies to continue|you have been blocked)/i.test(content.trim());
+  return /^(just a moment|access denied|attention required|robot check|sign in to continue|security verification|verify you are human|page not found|404\b|application error|internal server error|service unavailable)|^something went wrong(?:\s*[|—–-]|$)|^not found$/i.test(title.trim())||content.length<2000&&/^(?:[\s#*>_-]*)(?:checking your browser|verify you are human|enable javascript and cookies to continue|you have been blocked)/i.test(content.trim());
 }
 export function readSnapshotPayload(payload:any,requested:string):ReaderSnapshot{
   const d=payload?.data;
