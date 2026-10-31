@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.margin/
+.env*
+!.env.example
+*.sqlite*
+*.db
+*.pem
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+outputs/
+.DS_Store
+npm-debug.log*

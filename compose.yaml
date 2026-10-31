@@ -1,0 +1,14 @@
+services:
+  margin:
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      MARGIN_PASSWORD: ${MARGIN_PASSWORD:?Choose MARGIN_PASSWORD before starting Docker}
+      MARGIN_PUBLIC_URL: ${MARGIN_PUBLIC_URL:-http://localhost:3000}
+      JINA_API_KEY: ${JINA_API_KEY:-}
+    volumes:
+      - margin_data:/app/.margin
+    restart: unless-stopped
+volumes:
+  margin_data:

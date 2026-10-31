@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "curated_on": "2026-11-01",
+  "sources": [
+    {
+      "id": "trajectory",
+      "name": "Trajectory",
+      "url": "https://www.trajectory.ai/field-notes",
+      "color": "#577256"
+    },
+    {
+      "id": "preference-model",
+      "name": "Preference Model",
+      "url": "https://www.preferencemodel.com/blog/",
+      "color": "#b17bba"
+    },
+    {
+      "id": "base-labs",
+      "name": "Base Labs",
+      "url": "https://labs.baseten.co/articles",
+      "color": "#6881b0"
+    },
+    {
+      "id": "epoch-ai",
+      "name": "Epoch AI",
+      "url": "https://epoch.ai/latest",
+      "color": "#45958a"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "url": "https://www.anthropic.com/research",
+      "color": "#c18453"
+    },
+    {
+      "id": "openai-research",
+      "name": "OpenAI Research",
+      "url": "https://openai.com/research/index/",
+      "color": "#6881b0"
+    },
+    {
+      "id": "thinking-machines",
+      "name": "Thinking Machines",
+      "url": "https://thinkingmachines.ai/blog/",
+      "color": "#b17bba"
+    },
+    {
+      "id": "physical-intelligence",
+      "name": "Physical Intelligence",
+      "url": "https://www.pi.website/blog",
+      "color": "#b17bba"
+    },
+    {
+      "id": "goodfire-research",
+      "name": "Goodfire Research",
+      "url": "https://www.goodfire.com/research",
+      "color": "#577256"
+    },
+    {
+      "id": "prime-intellect",
+      "name": "Prime Intellect",
+      "url": "https://www.primeintellect.ai/blog",
+      "color": "#577256"
+    },
+    {
+      "id": "together-research",
+      "name": "Together Research",
+      "url": "https://www.together.ai/research-blog",
+      "color": "#b17bba"
+    },
+    {
+      "id": "cognition-research",
+      "name": "Cognition Research",
+      "url": "https://cognition.com/research",
+      "color": "#c18453"
+    }
+  ]
+}
