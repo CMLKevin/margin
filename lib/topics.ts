@@ -1,5 +1,5 @@
 // Shared, inspectable taxonomy. No model calls or publisher-specific guesses.
-export const TAXONOMY_VERSION=2;
+export const TAXONOMY_VERSION=3;
 export const topicCatalog=[
  {name:'Reinforcement learning',group:'Methods',description:'Rewards, policies, RL environments, and online learning.',pattern:/\bRL\b|reinforcement learning|reward (?:model|hacking|signal)|policy optimi[sz]ation|\b(?:GRPO|PPO|DPO|RLHF|RLAIF)\b/gi},
  {name:'Post-training',group:'Methods',description:'Fine-tuning, distillation, preference learning, and adaptation.',pattern:/post[- ]training|fine[- ]tun(?:e|es|ing)|distillation|supervised fine|preference (?:learning|optimi[sz]ation)|\bSFT\b/gi},
@@ -12,20 +12,20 @@ export const topicCatalog=[
  {name:'Inference',group:'Systems',description:'Serving, decoding, latency, throughput, and model efficiency.',pattern:/inference|latency|throughput|model serving|speculative decod|KV[- ]cache|quantization|intelligence density/gi},
  {name:'Compute',group:'Systems',description:'Chips, data centers, hardware capacity, and compute budgets.',pattern:/\bGPUs?\b|\bTPUs?\b|\bHBM\b|AI chips?|data cent(?:er|re)s?|comput(?:ing|e) (?:capacity|power|cost|budget|efficiency)|training compute|supercomput|semiconductor/gi},
  {name:'Agents',group:'Capabilities',description:'Tool use, autonomous workflows, environments, and delegation.',pattern:/\bagents?\b|agentic|tool[- ](?:use|using)|computer use|autonomous (?:systems?|workflows?)|multi[- ]agent/gi},
- {name:'Coding',group:'Capabilities',description:'Code models, software engineering, programming, and kernels.',pattern:/coding|programming|software engineering|code (?:generation|models?|review)|frontiercode|\bSWE[- ]\d|(?:cuda|GPU|fused) kernels?|\bCOBOL\b/gi},
+ {name:'Coding',group:'Capabilities',description:'Code models, software engineering, programming, and kernels.',pattern:/\bcoding\b|\bprogramming\b|software engineering|code (?:generation|models?|review)|frontiercode|\bSWE[- ]\d|(?:cuda|GPU|fused) kernels?|\bCOBOL\b/gi},
  {name:'Robotics',group:'Capabilities',description:'Embodied models, manipulation, control, and physical intelligence.',pattern:/\brobots?\b|robotics|robotic|embodied|manipulation|vision[- ]language[- ]action|physical intelligence|locomotion/gi},
  {name:'Multimodal',group:'Capabilities',description:'Vision, speech, audio, video, and cross-modal models.',pattern:/multimodal|multi[- ]modal|vision[- ]language|vision models?|image (?:generation|analysis|understanding)|video (?:generation|models?|understanding)|speech (?:generation|recognition)|audio (?:models?|generation)|\bVLMs?\b/gi},
  {name:'Science',group:'Applications & impact',description:'Biology, medicine, mathematics, physics, and scientific discovery.',pattern:/\bbiology\b|biological|bioinformatics|proteins?|drug (?:design|development|discovery)|scientific (?:discovery|understanding|research)|\bphysics\b|\bmathematics\b|math(?:ematical)? (?:research|preprints?|proof)|quantum|neurotoxins?|theorem|conjecture/gi},
  {name:'Security',group:'Applications & impact',description:'Cybersecurity, exploits, vulnerability research, and containment.',pattern:/\bsecurity\b|cyber(?:security|testing|attack|security monitors)?|security (?:fix|exploit|vulnerabil|research|monitor)|exploits?|vulnerabilit|prompt injection|red[- ]team|biosecurity|containment/gi},
  {name:'Safety',group:'Applications & impact',description:'Alignment, misuse, deception, monitoring, and model behavior.',pattern:/\bsafety\b|\balignment\b|misalign|decepti(?:on|ve)|reward hack|misuse|safeguards?|eval(?:uation)? awareness|trustworthiness|monitoring (?:models?|agents?)/gi},
- {name:'Economics',group:'Applications & impact',description:'Adoption, labor, productivity, markets, and economic effects.',pattern:/econom(?:ic|ics|y)|productivity|employment|labor market|labour market|world of work|division of labo[u]?r|AI adoption|AI use|adoption (?:of|and)|judgment calls/gi},
+ {name:'Economics',group:'Applications & impact',description:'Adoption, labor, productivity, markets, and economic effects.',pattern:/econom(?:ic|ics|y)|productivity|employment|labor market|labour market|world of work|division of labo[u]?r|\b(?:AI|LLM) (?:adoption|use)\b|adoption (?:of|and)|judgment calls/gi},
  {name:'Governance',group:'Applications & impact',description:'Policy, regulation, standards, societal choices, and institutions.',pattern:/governance|regulat(?:ion|ory)|AI polic(?:y|ies)|policy makers|policymakers|legislation|responsible (?:release|deployment)|\bAISI\b/gi},
  {name:'Open models',group:'Applications & impact',description:'Open weights, model releases, open research, and reproducibility.',pattern:/open[- ]weights?|open[- ](?:source|sourced) (?:models?|AI)|open models?|model releases?|reproducib(?:ility|le)/gi},
 ] as const;
 export const topicGroups=[...new Set(topicCatalog.map(t=>t.group))];
 export function classifyTopics(title:string,summary='',content=''):string[]{
  const count=(text:string,pattern:RegExp)=>[...text.matchAll(new RegExp(pattern.source,pattern.flags))].length;
- return topicCatalog.map((topic,index)=>{const t=count(title,topic.pattern),s=count(summary,topic.pattern),body=count(content.slice(0,18000),topic.pattern);return {name:topic.name,index,score:(t?18+Math.min(t,3):0)+(s?8+Math.min(s,3):0)+Math.min(body,6),eligible:!!t||!!s||body>=3};})
+ return topicCatalog.map((topic,index)=>{const t=count(title,topic.pattern),s=count(summary,topic.pattern),body=count(content.slice(0,18000),topic.pattern);return {name:topic.name,index,score:(t?18+Math.min(t,3):0)+(s?8+Math.min(s,3):0)+Math.min(body,6),eligible:!!t||!!s||body>=5};})
  .filter(t=>t.eligible&&t.score>=3).sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,4).map(t=>t.name);
 }
 export function topicDescription(name:string){return topicCatalog.find(t=>t.name===name)?.description||'Publisher research topic.';}

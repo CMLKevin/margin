@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio/slim';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import { publicUrl } from './public-url.ts';
 import {classifyTopics} from './topics.ts';
-import { collectionSession, readerSnapshot, snapshotHtml, escapeHtml, boundedText, accessPage, type CollectionSession, type ReaderSnapshot } from './reader.ts';
+import { collectionSession, readerSnapshot, snapshotHtml, escapeHtml, boundedText, accessPage, publisherBoilerplate, type CollectionSession, type ReaderSnapshot } from './reader.ts';
 export {publicUrl} from './public-url.ts';
 export {collectionSession} from './reader.ts';
 import defaultSources from '../sources/defaults.json' with {type:'json'};
@@ -220,7 +220,7 @@ export function extractCapture(entry:any,html:string,url:string,headers=new Head
   // Multimodal essays often alternate prose islands, demos and captions. Select
   // their common container rather than silently keeping only the longest island.
   if(textContainers.length>1){while(contentRoot.parent().length&&!textContainers.every(el=>el===contentRoot[0]||$.contains(contentRoot[0],el)))contentRoot=contentRoot.parent();}
-  contentRoot.find('script,style,nav,footer,form,noscript,button,[aria-hidden="true"]').remove();
+  contentRoot.find('nav,footer,form').remove();
   const media:any[]=[];const seen=new Set();
   contentRoot.find('img,video,audio,iframe').each((_,el)=>{const e=$(el);const kind=el.tagName==='img'?'image':el.tagName==='video'?'video':el.tagName==='audio'?'audio':'interactive';const src=e.attr('src')||e.attr('data-src')||e.attr('data-lazy-src')||e.find('source').attr('src')||(e.attr('srcset')||e.attr('data-srcset')||e.closest('picture').find('source').attr('srcset'))?.split(',').pop()?.trim().split(/\s+/)[0];if(kind==='image'&&src&&/headshot|avatar|logo|profile.photo|h%3D128%26w%3D128/i.test(src))return;try{const u=src?publicUrl(src,url):kind!=='image'?url:null;if(!u)return;const key=kind+u;if(seen.has(key))return;seen.add(key);media.push({kind,url:u,alt:e.attr('alt')||e.attr('title')||(src?'':'Browser-loaded media — view at source'),caption:e.closest('figure').find('figcaption').text().trim()});}catch{}});
   for(const m of media)if(m.kind==='interactive'&&/youtube(?:-nocookie)?\.com\/embed|player\.vimeo\.com|fast\.wistia\.(?:com|net)|loom\.com\/embed/.test(m.url))m.kind='video';
@@ -232,7 +232,7 @@ export function extractCapture(entry:any,html:string,url:string,headers=new Head
   let content=(blocks.length?blocks.join('\n\n'):contentRoot.text().replace(/\s+/g,' ').trim()).slice(0,50000);
   if(content.length<200&&structuredText.length>content.length)content=structuredText.slice(0,50000);
   const description=meta('description')||meta('og:description')||'';
-  const genericText=(s:string)=>/working to advance and democratize|research lab and product company|we are a research lab|we.re on a journey to advance|^A Blog post by .+ on Hugging Face$|^Anthropic is an AI safety and research company/i.test(s);
+  const genericText=publisherBoilerplate;
   const generic=genericText(description);
   const intro=contentRoot.find('p').map((_,e)=>$(e).text().trim()).get().find(t=>t.length>65&&!genericText(t));
   const summary=(entry.summary&&!genericText(entry.summary)?entry.summary:(!generic?description:'')||intro||blocks.find(t=>t.length>65)||content.slice(0,600)||'').trim().slice(0,600);

@@ -1,6 +1,6 @@
 import {classifyTopics,TAXONOMY_VERSION,topicCatalog} from './topics.ts';
-import {accessPage} from './reader.ts';
-export const CAPTURE_VERSION=2;
+import {accessPage,publisherBoilerplate} from './reader.ts';
+export const CAPTURE_VERSION=3;
 const migrations=new WeakMap<object,Promise<void>>();
 // Both D1 and the local SQLite adapter implement this small statement interface.
 export async function maintainLibrary(database:any){
@@ -14,7 +14,8 @@ export async function maintainLibrary(database:any){
   let cursor='';
   while(true){const rows=await database.prepare('SELECT id,title,summary,content FROM articles WHERE id>? ORDER BY id LIMIT 40').bind(cursor).all();if(!rows.results.length)break;cursor=rows.results.at(-1).id;const statements=rows.results.map((a:any)=>{
    if(accessPage(a.title,a.content))return database.prepare("UPDATE articles SET tags='[]',content='',summary='',capture='metadata only · rejected publisher error page',capture_version=0 WHERE id=?").bind(a.id);
-   return database.prepare('UPDATE articles SET tags=? WHERE id=?').bind(JSON.stringify(classifyTopics(a.title,a.summary,a.content)),a.id);
+   const summary=publisherBoilerplate(a.summary)?a.content.split('\n\n').find((p:string)=>p.length>65&&!publisherBoilerplate(p))?.slice(0,600)||a.summary:a.summary;
+   return database.prepare('UPDATE articles SET tags=?,summary=? WHERE id=?').bind(JSON.stringify(classifyTopics(a.title,summary,a.content)),summary,a.id);
   });if(statements.length)await database.batch(statements);}
   await database.prepare("INSERT INTO library_meta(key,value) VALUES('taxonomy_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(String(TAXONOMY_VERSION)).run();
  })().catch(e=>{migrations.delete(database);throw e;});

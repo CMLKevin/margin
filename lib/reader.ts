@@ -4,7 +4,7 @@ import { publicUrl } from './public-url.ts';
 
 export type ReaderSnapshot={url:string;title:string;description:string;markdown:string;metadata:Record<string,any>;fetchedAt:string;provider?:string};
 export type CollectionSession={readerRemaining:number;snapshots:Map<string,Promise<ReaderSnapshot>>;jinaApiKey?:string};
-export const collectionSession=(options:{jinaApiKey?:string}={}):CollectionSession=>({readerRemaining:16,snapshots:new Map(),jinaApiKey:options.jinaApiKey});
+export const collectionSession=(options:{jinaApiKey?:string}={}):CollectionSession=>({readerRemaining:options.jinaApiKey?28:16,snapshots:new Map(),jinaApiKey:options.jinaApiKey});
 const backoff=new Map<string,number>();
 
 export async function boundedText(response:Response,limit=4_000_000){
@@ -76,3 +76,5 @@ export function snapshotHtml(snapshot:ReaderSnapshot){
   }
   return meta+`<main><h1>${escapeHtml(snapshot.title)}</h1>`+$('body').html()+'</main>';
 }
+
+export function publisherBoilerplate(text:string){return /working to advance and democratize|research lab and product company|we are a research lab|we.re on a journey to advance|^A Blog post by .+ on Hugging Face$|^Anthropic is an AI safety and research company|^Physical Intelligence is bringing general-purpose AI|^The latest (?:news|research) from/i.test(text);}
