@@ -1,6 +1,6 @@
 # Packaged publishers
 
-These are the 12 active subscriptions from the live Margin Site on November 1, 2026. Both removed Hugging Face subscriptions are intentionally absent. This file packages public subscription links only.
+These are the 13 active subscriptions from the live Margin Site on November 1, 2026. Both removed Hugging Face subscriptions are intentionally absent. This file packages public subscription links only.
 
 [Trajectory](https://www.trajectory.ai/field-notes)
 
@@ -25,3 +25,5 @@ These are the 12 active subscriptions from the live Margin Site on November 1, 2
 [Together Research](https://www.together.ai/research-blog)
 
 [Cognition Research](https://cognition.com/research)
+
+[Anthropic Alignment Blog](https://alignment.anthropic.com/)

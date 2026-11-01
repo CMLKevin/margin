@@ -12,6 +12,7 @@ const xmlBuilder = new XMLBuilder({ignoreAttributes:false,attributeNamePrefix:'@
 const arr = (x:any):any[] => x == null ? [] : Array.isArray(x) ? x : [x];
 const str = (x:any):string => typeof x === 'object' ? String(x?.['#text'] ?? '') : String(x ?? '');
 const articlePath = /\/(blog|articles|field-notes|data-insights|gradient-updates|research|engineering|post|posts|reports|publications|latest|news|journal|insights|writing)\/.+/;
+const datedArticlePath=/\/(?:19|20)\d{2}\/(?:\d{1,2}\/){0,2}(?=[^/]*[a-zA-Z])[^/]+\/?$/;
 const utilityPath = /\/(tags?|category|categories|authors?|topics|teams?|careers|about|privacy|legal|contact|data|page)(\/|$)/i;
 const sameHost = (a:URL,b:URL) => a.hostname.replace(/^www\./,'')===b.hostname.replace(/^www\./,'');
 const scopeParams=(url:URL)=>[...url.searchParams.entries()].filter(([key])=>!/^(p|page|offset|cursor|sort|order|per_page|limit|[\w-]+_page)$/i.test(key));
@@ -69,12 +70,13 @@ export function htmlEntries(html:string,base:string,scoped=false):any[] {
     const published=date(a.find('time[datetime]').first().attr('datetime')||card.find('time[datetime]').first().attr('datetime'))||visibleDate(label)||visibleDate(card.text().slice(0,1000));
     const contextual=!!a.find('h1,h2,h3,h4,h5,h6,[role="heading"],[data-title],.h1,.h2,.h3,.h4,.h5,.h6,[class*="heading"],[class*="Heading"]').length || !!a.closest('article').length || !!published&&articlePath.test(u.pathname);
     const section=prefix && prefix!=='/latest' && prefix!=='/' ? u.pathname.startsWith(prefix+'/') : /\/(blog|articles|field-notes|data-insights|gradient-updates|research|post|reports|publications|latest)\/.+/.test(u.pathname);
-    if(!section && !(contextual&&(articlePath.test(u.pathname)||published)))return;
+    if(!section && !(contextual&&(articlePath.test(u.pathname)||datedArticlePath.test(u.pathname)||published)))return;
     const imageTitle=a.find('img[alt]').first().attr('alt');
     const title=(a.find('h1,h2,h3,h4,h5,h6,[role="heading"],[class*="title"],[class*="Title"],[data-title],.h1,.h2,.h3,.h4,.h5,.h6,[class*="heading"],[class*="Heading"]').first().text()||a.find('[title]').first().attr('title')||a.attr('aria-label')||(imageTitle&&imageTitle.length>5&&label.includes(imageTitle)?imageTitle:'')||label).replace(/\s+/g,' ').trim();
     if(title.length<4||/^(continue reading|read more|all posts|learn more|view all|next page)/i.test(title))return;
     if(!published&&/^(all|publications?|conclusions?|milestones?|releases?|research|blog|news|company|products?|load more|previous|next)$/i.test(title))return;
-    const old=out.get(url);if(!old)out.set(url,{url,title:title.slice(0,250),published});else if(!old.published&&published)out.set(url,{...old,published});
+    const summary=a.find('.description,[data-description],[class*="excerpt"],p').first().text().replace(/\s+/g,' ').trim().slice(0,600);
+    const old=out.get(url);if(!old)out.set(url,{url,title:title.slice(0,250),published,...(summary?{summary}:{})});else if(!old.published&&published)out.set(url,{...old,published});
   });
   // Read structured hydration data as data only; never execute publisher scripts.
   const prefixCounts=new Map<string,number>();for(const e of out.values()){const p=new URL(e.url).pathname.split('/').slice(0,-1).join('/');prefixCounts.set(p,(prefixCounts.get(p)||0)+1);}const inferredPrefix=[...prefixCounts].sort((a,b)=>b[1]-a[1]).find(([,n])=>n>=2)?.[0]||prefix;
@@ -96,7 +98,7 @@ export function readerEntries(snapshot:ReaderSnapshot,base:string){
     const nearby=blocks.slice(Math.max(0,i-2),i).reverse().map(el=>$(el).text()).join(' ');
     block.find('a[href]').each((_,el)=>{const a=$(el);const label=a.text().trim();if(!label||a.find('img').length)return;
       const context=a.closest('li').length?a.closest('li').text():block.text();const published=visibleDate(context)||visibleDate(nearby);
-      try{const path=new URL(publicUrl(a.attr('href')!,base)).pathname,prefix=new URL(base).pathname.replace(/\/$/,'');if(!published&&(!prefix||!path.startsWith(prefix+'/')))return;}catch{return;}
+      try{const path=new URL(publicUrl(a.attr('href')!,base)).pathname,prefix=new URL(base).pathname.replace(/\/$/,'');if(!published&&(!prefix||!path.startsWith(prefix+'/'))&&!datedArticlePath.test(path))return;}catch{return;}
       cards.push(`<article>${published?`<time datetime="${published}"></time>`:''}<a href="${escapeHtml(a.attr('href')!)}"><h3>${escapeHtml(label)}</h3></a></article>`);
     });
   }
@@ -208,30 +210,35 @@ export async function capture(entry:any,session=collectionSession()) {
 export function extractCapture(entry:any,html:string,url:string,headers=new Headers()) {
   const $=cheerio.load(html);
   const meta=(k:string)=>$(`meta[property="${k}"],meta[name="${k}"]`).first().attr('content');
-  const title=$('main h1,article h1,h1').first().text().trim()||entry.title||meta('og:title');
+  let front:any={};$('d-front-matter script').each((_,e)=>{try{const value=JSON.parse($(e).text());if(value&&typeof value==='object'&&!Array.isArray(value))front={...front,...value};}catch{}});
+  const title=$('main h1,article h1,h1').first().text().trim()||entry.title||meta('og:title')||front.title||new URL(url).pathname;
   let published=date(meta('article:published_time')||meta('datePublished')||meta('date'))||entry.published||date($('main time[datetime],article time[datetime],time[datetime]').first().attr('datetime'))||null;
   let author=meta('author')||meta('article:author')||entry.author||null;let structuredText='';
   $('script[type="application/ld+json"]').each((_,el)=>{try{const root=JSON.parse($(el).text());for(const j of arr(root['@graph']||root).filter(j=>/Article|BlogPosting|TechArticle|Report/.test(arr(j['@type']).join(' ')))){if(!published)published=date(j.datePublished);if(!author)author=arr(j.author).map(a=>a?.name||str(a)).join(', ')||null;if(typeof j.articleBody==='string'&&j.articleBody.length>structuredText.length)structuredText=cleanText(j.articleBody);}}catch{}});
+  if(!author&&(front.authors||front.author)){const names=arr(front.authors||front.author).flat(5).map(a=>typeof a==='string'?a:a?.name||a?.author||[a?.given,a?.family].filter(Boolean).join(' ')).filter(Boolean);author=[...new Set(names)].join(', ')||null;}
+  if(!published)published=visibleDate(str(front.published||front.date||front.datePublished));
   if(!author){const names=$('[itemprop="author"] [itemprop="name"],[rel="author"],.byline-author,.author-name,[class*="author-name"],[class*="authorName"],[data-blog-authors-inline] a,[data-author-name]').map((_,e)=>$(e).text().replace(/\s+/g,' ').trim().replace(/\*+$/,'')).get().filter(s=>s.length>2&&s.length<120&&!/^(authors?|share|follow|published)$/i.test(s));author=[...new Set(names)].join(', ')||null;}
   if(!published){const embedded=html.match(/(?:publishedAt|datePublished|published_time)\\?"\s*:\s*\\?"(\d{4}-\d{2}-\d{2}[^"\\]*)/);if(embedded)published=date(embedded[1]);}
   if(!published)published=visibleDate($('main,article').first().text().slice(0,2200));
-  const textContainers=$('[itemprop="articleBody"],.article-content,.post-content,.markdown-body,.prose').toArray().filter(e=>$(e).text().length>25).sort((a,b)=>$(b).text().length-$(a).text().length);
-  let contentRoot=textContainers.length?$(textContainers[0]):$('article').first().length?$('article').first():$('main').first().length?$('main').first():$('body');
+  const textContainers=$('[itemprop="articleBody"],.article-content,.post-content,.markdown-body,.prose,d-article,d-appendix').toArray().filter(e=>$(e).text().length>25).sort((a,b)=>$(b).text().length-$(a).text().length);
+  const distill=$('d-article,d-appendix');
+  let contentRoot=distill.length?distill:textContainers.length?$(textContainers[0]):$('article').first().length?$('article').first():$('main').first().length?$('main').first():$('body');
   // Multimodal essays often alternate prose islands, demos and captions. Select
   // their common container rather than silently keeping only the longest island.
-  if(textContainers.length>1){while(contentRoot.parent().length&&!textContainers.every(el=>el===contentRoot[0]||$.contains(contentRoot[0],el)))contentRoot=contentRoot.parent();}
+  if(!distill.length&&textContainers.length>1){while(contentRoot.parent().length&&!textContainers.every(el=>el===contentRoot[0]||$.contains(contentRoot[0],el)))contentRoot=contentRoot.parent();}
   contentRoot.find('nav,footer,form').remove();
   const media:any[]=[];const seen=new Set();
   contentRoot.find('img,video,audio,iframe').each((_,el)=>{const e=$(el);const kind=el.tagName==='img'?'image':el.tagName==='video'?'video':el.tagName==='audio'?'audio':'interactive';const src=e.attr('src')||e.attr('data-src')||e.attr('data-lazy-src')||e.find('source').attr('src')||(e.attr('srcset')||e.attr('data-srcset')||e.closest('picture').find('source').attr('srcset'))?.split(',').pop()?.trim().split(/\s+/)[0];if(kind==='image'&&src&&/headshot|avatar|logo|profile.photo|h%3D128%26w%3D128/i.test(src))return;try{const u=src?publicUrl(src,url):kind!=='image'?url:null;if(!u)return;const key=kind+u;if(seen.has(key))return;seen.add(key);media.push({kind,url:u,alt:e.attr('alt')||e.attr('title')||(src?'':'Browser-loaded media — view at source'),caption:e.closest('figure').find('figcaption').text().trim()});}catch{}});
   for(const m of media)if(m.kind==='interactive'&&/youtube(?:-nocookie)?\.com\/embed|player\.vimeo\.com|fast\.wistia\.(?:com|net)|loom\.com\/embed/.test(m.url))m.kind='video';
   contentRoot.find('a[href]').each((_,el)=>{const e=$(el);try{const target=publicUrl(e.attr('href')!,url),kind=/\.(mp4|webm|mov)(\?|$)|youtube\.com\/watch|youtu\.be\/|vimeo\.com\//i.test(target)?'video':/\.(mp3|wav|ogg)(\?|$)/i.test(target)?'audio':null;if(kind&&!media.some(m=>m.url===target))media.push({kind,url:target,alt:e.text().trim(),caption:''});}catch{}});
   contentRoot.find('canvas,svg').each((i,el)=>{const e=$(el);if(el.tagName==='svg'&&!e.find('text').length&&!e.attr('aria-label')&&!e.closest('figure').length)return;media.push({kind:'interactive',url:url+(e.attr('id')?'#'+e.attr('id'):''),alt:e.attr('aria-label')||e.find('title').text()||'Inline visual — view at source',caption:e.closest('figure').find('figcaption').text().trim()});});
+  contentRoot.find('script[type="application/json"][id]').each((_,el)=>{const id=$(el).attr('id')||'';if(!/^[\w-]+-data$/.test(id))return;const target=id.replace(/-data$/,'');const widget=contentRoot.find('[id="'+target+'"]');if(widget.length&&!media.some(m=>m.kind==='interactive'&&m.url===url+'#'+target))media.push({kind:'interactive',url:url+'#'+target,alt:widget.attr('aria-label')||widget.find('h2,h3').first().text()||'Interactive demonstration — view at source',caption:''});});
   contentRoot.find('script,style,nav,footer,header,form,noscript,button,[aria-hidden="true"]').remove();
   contentRoot.find('.katex').each((_,el)=>{const tex=$(el).find('annotation[encoding="application/x-tex"]').text();if(tex)$(el).replaceWith($('<span>').text(' $'+tex+'$ '));});
   const blocks=contentRoot.find('h1,h2,h3,h4,p,li:not(:has(p)):not(:has(li)),figcaption,pre,tr').filter((_,e)=>!$(e).parents('pre,table').length||e.tagName==='tr').map((_,e)=>e.tagName==='pre'?'```\n'+$(e).text().trim()+'\n```':e.tagName==='tr'?$(e).find('th,td').map((_,cell)=>$(cell).text().replace(/\s+/g,' ').trim()).get().join(' | '):$(e).text().replace(/\s+/g,' ').trim()).get().filter(t=>t.length>2).filter((t,i,a)=>t!==a[i-1]);
   let content=(blocks.length?blocks.join('\n\n'):contentRoot.text().replace(/\s+/g,' ').trim()).slice(0,50000);
   if(content.length<200&&structuredText.length>content.length)content=structuredText.slice(0,50000);
-  const description=meta('description')||meta('og:description')||'';
+  const description=meta('description')||meta('og:description')||(typeof front.description==='string'?front.description:'');
   const genericText=publisherBoilerplate;
   const generic=genericText(description);
   const intro=contentRoot.find('p').map((_,e)=>$(e).text().trim()).get().find(t=>t.length>65&&!genericText(t));

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "curated_on": "2026-11-01",
   "sources": [
     {
@@ -72,6 +72,12 @@
       "id": "cognition-research",
       "name": "Cognition Research",
       "url": "https://cognition.com/research",
+      "color": "#c18453"
+    },
+    {
+      "id": "anthropic-alignment",
+      "name": "Anthropic Alignment Blog",
+      "url": "https://alignment.anthropic.com/",
       "color": "#c18453"
     }
   ]

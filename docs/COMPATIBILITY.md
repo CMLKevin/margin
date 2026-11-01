@@ -38,3 +38,9 @@ Publisher access and page structure can change. OpenAI currently needs the reade
 Text extraction is capped at 50,000 characters and the media manifest at forty references per post. Interactive charts, canvas rendering, equations, video content, and browser-only behavior are referenced rather than semantically or visually interpreted. Index traversal checks at most 25 explicit pages per collection. New article imports remain bounded at twelve per source per check, with later checks continuing backfill; discovery counts do not imply that all those posts have already been imported.
 
 Repeat the network audit with `node scripts/audit-publishers.mjs`. Repeat the state-changing feature matrix only against a disposable, populated localhost instance with sources paused using `node scripts/audit-library-features.mjs`.
+
+## Follow-up: Alignment Science Blog
+
+The subsequently added [Anthropic Alignment Science Blog](https://alignment.anthropic.com/) exposed a real gap: its homepage links directly into year folders, without a `/blog/` or `/research/` prefix, and its articles use Distill custom elements. The collector now recognizes heading-backed year-folder article links on homepage indexes and in reader snapshots, preserves the index abstracts, and reads Distill front matter and article/appendix content. Nested author lists and dated metadata are supported. Data-backed interactive demonstrations retain links to their original page anchors.
+
+The live index exposed 57 posts. Three research articles were checked end to end, yielding 37,573, 20,622, and 4,023 characters of article text, with 25, 9, and 2 media references respectively. Some posts provide only a month heading on the index and no exact publication date in the article. Margin keeps the exact date unavailable instead of inventing a publication day. The blog is included as the thirteenth packaged source for new installations.

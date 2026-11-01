@@ -24,7 +24,7 @@ For development, use `npm run dev` instead of building and starting. Both modes 
 
 ## What ships by default
 
-The packaged list was copied from the original owner's **active live Site subscriptions on November 1, 2026**, rather than the older local seed. It contains Trajectory, Preference Model, Base Labs, Epoch AI, Anthropic Research, OpenAI Research, Thinking Machines, Physical Intelligence, Goodfire Research, Prime Intellect, Together Research, and Cognition Research.
+The packaged list was copied from the original owner's **active live Site subscriptions on November 1, 2026**, rather than the older local seed. It contains Trajectory, Preference Model, Base Labs, Epoch AI, Anthropic Research, OpenAI Research, Thinking Machines, Physical Intelligence, Goodfire Research, Prime Intellect, Together Research, Cognition Research, and the Anthropic Alignment Science Blog.
 
 Both intentionally removed Hugging Face subscriptions are excluded. The software still supports ordinary Hugging Face blog links and tag-filtered links if you choose to add one yourself. See [sources/defaults.json](sources/defaults.json) for the exact URLs and [SOURCES.md](SOURCES.md) for clickable links.
 
@@ -122,7 +122,7 @@ Margin's original code is MIT licensed. UI and font sources retain their own not
 
 ## Publisher compatibility and topics
 
-The [compatibility audit](docs/COMPATIBILITY.md) records the current twelve publishers, discovery routes, sampled captures, and tested inbox/MCP behavior. Run `node scripts/audit-publishers.mjs` to repeat the read-only live check. It writes public publisher captures into ignored `outputs/compatibility/`; it does not change subscriptions or personal state. The optional local feature audit, `node scripts/audit-library-features.mjs`, is for a populated disposable local instance with its sources paused, and temporarily exercises save/read/notes and source removal/restoration there.
+The [compatibility audit](docs/COMPATIBILITY.md) records the initial twelve publishers and the subsequent Alignment Science Blog check, discovery routes, sampled captures, and tested inbox/MCP behavior. Run `node scripts/audit-publishers.mjs` to repeat the read-only live check. It writes public publisher captures into ignored `outputs/compatibility/`; it does not change subscriptions or personal state. The optional local feature audit, `node scripts/audit-library-features.mjs`, is for a populated disposable local instance with its sources paused, and temporarily exercises save/read/notes and source removal/restoration there.
 
 Topics share one twenty-category vocabulary across the inbox, previews, related posts, and MCP overview/search. Categories are grouped by methods, systems, capabilities, and applications/impact. Assignment weighs the title and publisher summary more strongly than repeated body terms, keeps the strongest four matches, and leaves weak matches unassigned. This is a transparent navigation aid rather than a claim that the publisher chose those labels. Existing libraries are reclassified automatically without changing saved/read state or notes. Topic counts respect the current source and inbox filters.
 
