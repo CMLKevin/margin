@@ -9,6 +9,9 @@ export async function maintainLibrary(database:any){
   await database.prepare('CREATE TABLE IF NOT EXISTS library_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)').run();
   const columns=await database.prepare('PRAGMA table_info(articles)').all();
   if(!columns.results.some((c:any)=>c.name==='capture_version')){try{await database.prepare('ALTER TABLE articles ADD COLUMN capture_version INTEGER NOT NULL DEFAULT 0').run();}catch(e){const current=await database.prepare('PRAGMA table_info(articles)').all();if(!current.results.some((c:any)=>c.name==='capture_version'))throw e;}}
+  const fields=await database.prepare('PRAGMA table_info(articles)').all();
+  if(!fields.results.some((c:any)=>c.name==='published_precision')){try{await database.prepare("ALTER TABLE articles ADD COLUMN published_precision TEXT NOT NULL DEFAULT 'unknown'").run();}catch(e){const current=await database.prepare('PRAGMA table_info(articles)').all();if(!current.results.some((c:any)=>c.name==='published_precision'))throw e;}}
+  await database.prepare("UPDATE articles SET published_precision='day' WHERE published IS NOT NULL AND published_precision='unknown'").run();
   const version=await database.prepare("SELECT value FROM library_meta WHERE key='taxonomy_version'").first();
   if(Number(version?.value)===TAXONOMY_VERSION)return;
   let cursor='';

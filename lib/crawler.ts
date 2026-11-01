@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio/slim';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import { publicUrl } from './public-url.ts';
+import {publicationPeriod} from './publication-date.ts';
 import {classifyTopics} from './topics.ts';
 import { collectionSession, readerSnapshot, snapshotHtml, escapeHtml, boundedText, accessPage, publisherBoilerplate, type CollectionSession, type ReaderSnapshot } from './reader.ts';
 export {publicUrl} from './public-url.ts';
@@ -20,7 +21,7 @@ const keepsScope=(target:URL,source:URL)=>scopeParams(source).every(([key,value]
 const publisherHost = (a:URL,b:URL) => sameHost(a,b)||a.hostname.endsWith('.'+b.hostname.replace(/^www\./,''));
 function articleUrl(raw:string,base:string) {
   const url=publicUrl(raw,base),u=new URL(url),origin=new URL(base);
-  if(!publisherHost(u,origin)||sameHost(u,origin)&&u.pathname.replace(/\/$/,'')===origin.pathname.replace(/\/$/,'')||utilityPath.test(u.pathname)||/\.(pdf|png|jpe?g|webp|gif|svg|zip|xml|mp4)$/i.test(u.pathname)||u.searchParams.has('page')||u.searchParams.has('category'))return null;
+  if(!publisherHost(u,origin)||sameHost(u,origin)&&u.pathname.replace(/\/$/,'')===origin.pathname.replace(/\/$/,'')||utilityPath.test(u.pathname)||/^\/(?:19|20)\d{2}(?:\/\d{1,2}){0,2}\/?$/.test(u.pathname)||/\.(pdf|png|jpe?g|webp|gif|svg|zip|xml|mp4)$/i.test(u.pathname)||u.searchParams.has('page')||u.searchParams.has('category'))return null;
   return url;
 }
 function ordered(entries:any[]) {
@@ -46,16 +47,17 @@ function visibleDate(text:string) {
   const written=text.match(/(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+20\d{2}(?!\d)/i);
   return written?date(written[0]+' UTC'):null;
 }
+function publicationMetadata(raw:any){const range=publicationPeriod(str(raw));if(range)return range;const value=/T\d{2}:|UTC|GMT|Z$|[+-]\d{2}:?\d{2}$/i.test(str(raw))?date(raw):visibleDate(str(raw))||date(raw);return value?{published:value,published_precision:'day'}:null;}
 export function topics(text:string) {
   return classifyTopics(text);
 }
 export function feedEntries(body:string,base:string):any[] {
   try {
     const safely=(items:any[],convert:(i:any)=>any)=>ordered(items.slice(0,2000).flatMap(i=>{try{const e=convert(i);return e.title&&e.url?[{...e,fromFeed:true}]:[];}catch{return [];}}));
-    if(body.trim().startsWith('{')){const j=JSON.parse(body);if(!Array.isArray(j.items))return [];return safely(j.items,i=>({url:publicUrl(i.url||i.external_url,base),title:cleanText(i.title||''),summary:cleanText(i.summary||i.content_html||i.content_text||'').slice(0,600),feedContent:i.content_html||i.content_text||'',feedContentType:i.content_html?'html':'text',published:date(i.date_published||i.date_modified),author:arr(i.authors||i.author).map(a=>a.name).filter(Boolean).join(', '),categories:arr(i.tags).map(str)}));}
+    if(body.trim().startsWith('{')){const j=JSON.parse(body);if(!Array.isArray(j.items))return [];return safely(j.items,i=>({url:publicUrl(i.url||i.external_url,base),title:cleanText(i.title||''),summary:cleanText(i.summary||i.content_html||i.content_text||'').slice(0,600),feedContent:i.content_html||i.content_text||'',feedContentType:i.content_html?'html':'text',...(publicationMetadata(i.date_published||i.date_modified)||{published:null,published_precision:'unknown'}),author:arr(i.authors||i.author).map(a=>a.name).filter(Boolean).join(', '),categories:arr(i.tags).map(str)}));}
     const j=xml.parse(body);const items=j.rss?.channel?.item ?? j.feed?.entry ?? j.RDF?.item;
     const feedText=(v:any)=>v?.['@_type']==='xhtml'?xmlBuilder.build(v):str(v);
-    return safely(arr(items),i=>{const link=typeof i.link==='string'?i.link:arr(i.link).find(l=>(!l['@_rel']||l['@_rel']==='alternate')&&(!l['@_type']||/html/.test(l['@_type'])))?.['@_href'];const full=feedText(i.encoded||i.content);const entryBase=i['@_base']||j.feed?.['@_base'];return {url:publicUrl(link||str(i.guid),entryBase?publicUrl(entryBase,base):base),title:cleanText(feedText(i.title)),summary:cleanText(feedText(i.description||i.summary||full)).slice(0,600),feedContent:full,feedContentType:i.content?.['@_type']==='text'?'text':'html',published:date(i.pubDate||i.published||i.updated||i.date),author:str(i.creator||i.author?.name||i.author),categories:arr(i.category).map(c=>str(c)||c['@_term']).filter(Boolean)};});
+    return safely(arr(items),i=>{const link=typeof i.link==='string'?i.link:arr(i.link).find(l=>(!l['@_rel']||l['@_rel']==='alternate')&&(!l['@_type']||/html/.test(l['@_type'])))?.['@_href'];const full=feedText(i.encoded||i.content);const entryBase=i['@_base']||j.feed?.['@_base'];return {url:publicUrl(link||str(i.guid),entryBase?publicUrl(entryBase,base):base),title:cleanText(feedText(i.title)),summary:cleanText(feedText(i.description||i.summary||full)).slice(0,600),feedContent:full,feedContentType:i.content?.['@_type']==='text'?'text':'html',...(publicationMetadata(i.pubDate||i.published||i.updated||i.date)||{published:null,published_precision:'unknown'}),author:str(i.creator||i.author?.name||i.author),categories:arr(i.category).map(c=>str(c)||c['@_term']).filter(Boolean)};});
   }catch{return [];}
 }
 export function htmlEntries(html:string,base:string,scoped=false):any[] {
@@ -67,7 +69,9 @@ export function htmlEntries(html:string,base:string,scoped=false):any[] {
     let card=a.closest('article,li,[class*="card"],[class*="Card"],[role="listitem"],.w-dyn-item');
     if(!card.length){const parent=a.parents().toArray().slice(0,5).find(e=>$(e).find('time').length===1&&$(e).find('h1,h2,h3,h4').length<=2);if(parent)card=$(parent);}
     const label=a.text().replace(/\s+/g,' ').trim();
-    const published=date(a.find('time[datetime]').first().attr('datetime')||card.find('time[datetime]').first().attr('datetime'))||visibleDate(label)||visibleDate(card.text().slice(0,1000));
+    const exactPublished=date(a.find('time[datetime]').first().attr('datetime')||card.find('time[datetime]').first().attr('datetime'))||visibleDate(label)||visibleDate(card.text().slice(0,1000));
+    let period:ReturnType<typeof publicationPeriod>=null;for(const node of [a,...a.parents().toArray().slice(0,2).map(e=>$(e))]){const label=node.prevAll('[class*="date"],time,h2,h3').first().text();period=publicationPeriod(label);if(period)break;}
+    const published=exactPublished||period?.published||null;const published_precision=exactPublished?'day':period?.published_precision||'unknown';
     const contextual=!!a.find('h1,h2,h3,h4,h5,h6,[role="heading"],[data-title],.h1,.h2,.h3,.h4,.h5,.h6,[class*="heading"],[class*="Heading"]').length || !!a.closest('article').length || !!published&&articlePath.test(u.pathname);
     const section=prefix && prefix!=='/latest' && prefix!=='/' ? u.pathname.startsWith(prefix+'/') : /\/(blog|articles|field-notes|data-insights|gradient-updates|research|post|reports|publications|latest)\/.+/.test(u.pathname);
     if(!section && !(contextual&&(articlePath.test(u.pathname)||datedArticlePath.test(u.pathname)||published)))return;
@@ -76,7 +80,7 @@ export function htmlEntries(html:string,base:string,scoped=false):any[] {
     if(title.length<4||/^(continue reading|read more|all posts|learn more|view all|next page)/i.test(title))return;
     if(!published&&/^(all|publications?|conclusions?|milestones?|releases?|research|blog|news|company|products?|load more|previous|next)$/i.test(title))return;
     const summary=a.find('.description,[data-description],[class*="excerpt"],p').first().text().replace(/\s+/g,' ').trim().slice(0,600);
-    const old=out.get(url);if(!old)out.set(url,{url,title:title.slice(0,250),published,...(summary?{summary}:{})});else if(!old.published&&published)out.set(url,{...old,published});
+    const old=out.get(url);if(!old)out.set(url,{url,title:title.slice(0,250),published,published_precision,...(summary?{summary}:{}),...(a.find('.byline,.authors,[rel="author"]').first().text().trim()?{author:a.find('.byline,.authors,[rel="author"]').first().text().replace(/\s+/g,' ').replace(/[,;]?\s*(19|20)\d{2}\s*$/,'').trim()}: {})});else if(!old.published&&published)out.set(url,{...old,published,published_precision});
   });
   // Read structured hydration data as data only; never execute publisher scripts.
   const prefixCounts=new Map<string,number>();for(const e of out.values()){const p=new URL(e.url).pathname.split('/').slice(0,-1).join('/');prefixCounts.set(p,(prefixCounts.get(p)||0)+1);}const inferredPrefix=[...prefixCounts].sort((a,b)=>b[1]-a[1]).find(([,n])=>n>=2)?.[0]||prefix;
@@ -84,7 +88,7 @@ export function htmlEntries(html:string,base:string,scoped=false):any[] {
     const type=arr(v['@type']);const structured=type.some(t=>/Article|BlogPosting|ListItem|TechArticle/.test(t));
     const path=typeof v.url==='string'?v.url:structured&&typeof v['@id']==='string'?v['@id']:typeof v.slug==='string'&&prefix&&prefix!=='/latest'&&!v.slug.includes('/')?inferredPrefix+'/'+v.slug:null;
     const title=v.title||(structured&&(v.headline||v.name));
-    if(path&&typeof title==='string'&&title.length>=4){try{const visible=typeof v.url!=='string'?[...out.values()].find(e=>e.title.trim().toLowerCase()===cleanText(title).toLowerCase()):null;const url=visible?.url||articleUrl(path,base);if(url&&(!scoped||out.has(url))&&(out.has(url)||articlePath.test(new URL(url).pathname)||structured)){const old=out.get(url);out.set(url,{...old,url,title:cleanText(title).slice(0,250),published:date(v.publishedAt||v.datePublished||v.date)||old?.published,summary:cleanText(str(v.description||v.summary)),author:str(v.authorName)||arr(v.authors||v.author).map(a=>typeof a==='string'?a:a.name).filter(Boolean).join(', ')});}}catch{}}
+    if(path&&typeof title==='string'&&title.length>=4){try{const visible=typeof v.url!=='string'?[...out.values()].find(e=>e.title.trim().toLowerCase()===cleanText(title).toLowerCase()):null;const url=visible?.url||articleUrl(path,base);if(url&&(!scoped||out.has(url))&&(out.has(url)||articlePath.test(new URL(url).pathname)||structured)){const old=out.get(url);out.set(url,{...old,url,title:cleanText(title).slice(0,250),...(publicationMetadata(v.publishedAt||v.datePublished||v.date)||{}),summary:cleanText(str(v.description||v.summary)),author:str(v.authorName)||arr(v.authors||v.author).map(a=>typeof a==='string'?a:a.name).filter(Boolean).join(', ')});}}catch{}}
     for(const child of Object.values(v))if(typeof child==='object')visit(child,depth+1);};
   $('script').each((_,el)=>{const s=$(el).text();try{visit(JSON.parse(s));}catch{}const m=s.match(/self\.__next_f\.push\((\[.*\])\)/s);if(m){try{const text=JSON.parse(m[1])[1];if(typeof text==='string')for(const line of text.split('\n')){try{visit(JSON.parse(line.slice(line.indexOf(':')+1)));}catch{}}}catch{}}});
   const unpack=(v:any):any=>{if(Array.isArray(v)&&typeof v[0]==='number'){if(v[0]===1)return arr(v[1]).map(unpack);return unpack(v[1]);}if(v&&typeof v==='object')return Object.fromEntries(Object.entries(v).map(([k,val])=>[k,unpack(val)]));return v;};
@@ -189,7 +193,7 @@ export function feedFallback(entry:any,reason:string) {
     const a=extractCapture(entry,entry.feedContentType==='text'?`<article></article>`:entry.feedContent,entry.url);
     return {...a,content:entry.feedContentType==='text'?String(entry.feedContent).slice(0,50000):a.content,capture:'feed content only · original unavailable'};
   }
-  return {url:entry.url,title:entry.title,summary:entry.summary,content:'',published:entry.published||null,author:entry.author||null,media:'[]',tags:JSON.stringify(classifyTopics(entry.title,entry.summary)),capture:'RSS excerpt only · original unavailable'};
+  return {url:entry.url,title:entry.title,summary:entry.summary,content:'',published:entry.published||null,published_precision:entry.published_precision||(entry.published?'day':'unknown'),author:entry.author||null,media:'[]',tags:JSON.stringify(classifyTopics(entry.title,entry.summary)),capture:'RSS excerpt only · original unavailable'};
 }
 export async function capture(entry:any,session=collectionSession()) {
   let direct:any;let reason='';
@@ -212,14 +216,18 @@ export function extractCapture(entry:any,html:string,url:string,headers=new Head
   const meta=(k:string)=>$(`meta[property="${k}"],meta[name="${k}"]`).first().attr('content');
   let front:any={};$('d-front-matter script').each((_,e)=>{try{const value=JSON.parse($(e).text());if(value&&typeof value==='object'&&!Array.isArray(value))front={...front,...value};}catch{}});
   const title=$('main h1,article h1,h1').first().text().trim()||entry.title||meta('og:title')||front.title||new URL(url).pathname;
-  let published=date(meta('article:published_time')||meta('datePublished')||meta('date'))||entry.published||date($('main time[datetime],article time[datetime],time[datetime]').first().attr('datetime'))||null;
+  const publicationHint:{period:ReturnType<typeof publicationPeriod>}={period:null};const publicationValue=(raw:any)=>{const period=publicationPeriod(str(raw));if(period){publicationHint.period=publicationHint.period||period;return null;}return /T\d{2}:|UTC|GMT|Z$|[+-]\d{2}:?\d{2}$/i.test(str(raw))?date(raw):visibleDate(str(raw))||date(raw);};
+  let published=publicationValue(meta('article:published_time')||meta('datePublished')||meta('date'))||(!['month','year'].includes(entry.published_precision)?entry.published:null)||publicationValue($('main time[datetime],article time[datetime],time[datetime]').first().attr('datetime'))||null;
   let author=meta('author')||meta('article:author')||entry.author||null;let structuredText='';
-  $('script[type="application/ld+json"]').each((_,el)=>{try{const root=JSON.parse($(el).text());for(const j of arr(root['@graph']||root).filter(j=>/Article|BlogPosting|TechArticle|Report/.test(arr(j['@type']).join(' ')))){if(!published)published=date(j.datePublished);if(!author)author=arr(j.author).map(a=>a?.name||str(a)).join(', ')||null;if(typeof j.articleBody==='string'&&j.articleBody.length>structuredText.length)structuredText=cleanText(j.articleBody);}}catch{}});
+  $('script[type="application/ld+json"]').each((_,el)=>{try{const root=JSON.parse($(el).text());for(const j of arr(root['@graph']||root).filter(j=>/Article|BlogPosting|TechArticle|Report/.test(arr(j['@type']).join(' ')))){if(!published)published=publicationValue(j.datePublished);if(!author)author=arr(j.author).map(a=>a?.name||str(a)).join(', ')||null;if(typeof j.articleBody==='string'&&j.articleBody.length>structuredText.length)structuredText=cleanText(j.articleBody);}}catch{}});
   if(!author&&(front.authors||front.author)){const names=arr(front.authors||front.author).flat(5).map(a=>typeof a==='string'?a:a?.name||a?.author||[a?.given,a?.family].filter(Boolean).join(' ')).filter(Boolean);author=[...new Set(names)].join(', ')||null;}
-  if(!published)published=visibleDate(str(front.published||front.date||front.datePublished));
+  if(!published)published=publicationValue(front.published||front.date||front.datePublished);
   if(!author){const names=$('[itemprop="author"] [itemprop="name"],[rel="author"],.byline-author,.author-name,[class*="author-name"],[class*="authorName"],[data-blog-authors-inline] a,[data-author-name]').map((_,e)=>$(e).text().replace(/\s+/g,' ').trim().replace(/\*+$/,'')).get().filter(s=>s.length>2&&s.length<120&&!/^(authors?|share|follow|published)$/i.test(s));author=[...new Set(names)].join(', ')||null;}
-  if(!published){const embedded=html.match(/(?:publishedAt|datePublished|published_time)\\?"\s*:\s*\\?"(\d{4}-\d{2}-\d{2}[^"\\]*)/);if(embedded)published=date(embedded[1]);}
-  if(!published)published=visibleDate($('main,article').first().text().slice(0,2200));
+  if(!published&&!publicationHint.period&&!['month','year'].includes(entry.published_precision)){const embedded=html.match(/(?:publishedAt|datePublished|published_time)\\?"\s*:\s*\\?"(\d{4}-\d{2}-\d{2}[^"\\]*)/);if(embedded)published=date(embedded[1]);}
+  if(!published)published=visibleDate($('.published,.publication-date,time,.byline,d-byline').first().text());
+  if(!published&&!publicationHint.period&&!['month','year'].includes(entry.published_precision))published=visibleDate($('main,article').first().text().slice(0,2200));
+  const published_precision=published?'day':publicationHint.period?.published_precision||(entry.published?entry.published_precision||'day':'unknown');
+  if(!published)published=publicationHint.period?.published||entry.published||null;
   const textContainers=$('[itemprop="articleBody"],.article-content,.post-content,.markdown-body,.prose,d-article,d-appendix').toArray().filter(e=>$(e).text().length>25).sort((a,b)=>$(b).text().length-$(a).text().length);
   const distill=$('d-article,d-appendix');
   let contentRoot=distill.length?distill:textContainers.length?$(textContainers[0]):$('article').first().length?$('article').first():$('main').first().length?$('main').first():$('body');
@@ -244,5 +252,5 @@ export function extractCapture(entry:any,html:string,url:string,headers=new Head
   const intro=contentRoot.find('p').map((_,e)=>$(e).text().trim()).get().find(t=>t.length>65&&!genericText(t));
   const summary=(entry.summary&&!genericText(entry.summary)?entry.summary:(!generic?description:'')||intro||blocks.find(t=>t.length>65)||content.slice(0,600)||'').trim().slice(0,600);
   const frameBlocked=/deny|sameorigin/i.test(headers.get('x-frame-options')||'')||/frame-ancestors\s+(?:'none'|'self')/.test(headers.get('content-security-policy')||'');
-  return {url,title:title.trim(),summary,content,published,author,media:JSON.stringify(media.slice(0,40)),tags:JSON.stringify(classifyTopics(title,summary,content)),capture:content.length>200?(frameBlocked?'text · original opens in tab':'text · media references'):'metadata only'};
+  return {url,title:title.trim(),summary,content,published,published_precision,author,media:JSON.stringify(media.slice(0,40)),tags:JSON.stringify(classifyTopics(title,summary,content)),capture:content.length>200?(frameBlocked?'text · original opens in tab':'text · media references'):'metadata only'};
 }
